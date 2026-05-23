@@ -1,7 +1,444 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+import { ref, computed, onMounted } from 'vue'
+import axios from 'axios'
+
+const config = ref({
+  project: {
+    name: 'myapp',
+    port: 8080,
+    database: {
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      user: 'root',
+      password: '',
+      database: 'myapp'
+    }
+  },
+  routes: [],
+  middlewares: ['Logger', 'Recovery', 'CORS']
+})
+
+const activeTab = ref('config')
+const saving = ref(false)
+const generating = ref(false)
+const toast = ref({ show: false, message: '', type: 'success' })
+const middlewaresInput = ref('Logger, Recovery, CORS')
+
+const jsonString = computed({
+  get() {
+    return JSON.stringify(config.value, null, 2)
+  },
+  set() {}
+})
+
+const showToast = (message, type = 'success') => {
+  toast.value = { show: true, message, type }
+  setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+const syncFromJson = () => {
+  try {
+    config.value = JSON.parse(jsonString.value)
+  } catch (e) {
+    showToast('JSON 格式错误: ' + e.message, 'error')
+  }
+}
+
+const loadConfig = async () => {
+  try {
+    const res = await axios.get('/api/config')
+    if (res.data.success) {
+      config.value = res.data.data
+      middlewaresInput.value = config.value.middlewares?.join(', ') || ''
+    }
+  } catch (e) {
+    showToast('加载配置失败', 'error')
+  }
+}
+
+const saveConfig = async () => {
+  saving.value = true
+  try {
+    config.value.middlewares = middlewaresInput.value.split(',').map(s => s.trim()).filter(s => s)
+    const res = await axios.post('/api/config', config.value)
+    if (res.data.success) {
+      showToast('配置已保存')
+    } else {
+      showToast('保存失败: ' + res.data.error, 'error')
+    }
+  } catch (e) {
+    showToast('保存失败', 'error')
+  }
+  saving.value = false
+}
+
+const generateCode = async () => {
+  generating.value = true
+  try {
+    const res = await axios.post('/api/generate')
+    if (res.data.success) {
+      showToast('代码已生成到当前目录！')
+    } else {
+      showToast('生成失败: ' + res.data.error, 'error')
+    }
+  } catch (e) {
+    showToast('生成失败', 'error')
+  }
+  generating.value = false
+}
+
+const addRoute = () => {
+  config.value.routes.push({
+    method: 'GET',
+    path: '/new',
+    handler: 'NewHandler',
+    middleware: []
+  })
+}
+
+const deleteRoute = (index) => {
+  config.value.routes.splice(index, 1)
+}
+
+onMounted(() => {
+  loadConfig()
+})
 </script>
 
 <template>
-  <HelloWorld />
+  <div class="app">
+    <h1>🦊 bbcli - Gin 项目配置工具</h1>
+    
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button 
+        class="tab-btn" 
+        :class="{active: activeTab === 'config'}" 
+        @click="activeTab = 'config'"
+      >
+        项目配置
+      </button>
+      <button 
+        class="tab-btn" 
+        :class="{active: activeTab === 'routes'}" 
+        @click="activeTab = 'routes'"
+      >
+        路由配置
+      </button>
+      <button 
+        class="tab-btn" 
+        :class="{active: activeTab === 'json'}" 
+        @click="activeTab = 'json'"
+      >
+        JSON 编辑器
+      </button>
+    </div>
+    
+    <!-- Project Config Tab -->
+    <div v-if="activeTab === 'config'" class="card">
+      <h2>📦 项目配置</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>项目名称</label>
+          <input v-model="config.project.name" placeholder="myapp">
+        </div>
+        <div class="form-group">
+          <label>端口号</label>
+          <input v-model="config.project.port" type="number" placeholder="8080">
+        </div>
+      </div>
+      
+      <h2 style="margin-top: 24px;">🗄️ 数据库配置</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>数据库类型</label>
+          <select v-model="config.project.database.type">
+            <option value="">不使用数据库</option>
+            <option value="mysql">MySQL</option>
+            <option value="postgres">PostgreSQL</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>主机</label>
+          <input v-model="config.project.database.host" placeholder="localhost">
+        </div>
+        <div class="form-group">
+          <label>端口</label>
+          <input v-model="config.project.database.port" type="number" placeholder="3306">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>用户名</label>
+          <input v-model="config.project.database.user" placeholder="root">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input v-model="config.project.database.password" type="password" placeholder="••••••">
+        </div>
+        <div class="form-group">
+          <label>数据库名</label>
+          <input v-model="config.project.database.database" placeholder="myapp">
+        </div>
+      </div>
+      
+      <h2 style="margin-top: 24px;">🛡️ 全局中间件</h2>
+      <div class="form-group">
+        <label>中间件列表（逗号分隔）</label>
+        <input v-model="middlewaresInput" placeholder="Logger, Recovery, CORS">
+      </div>
+      
+      <div class="btn-group">
+        <button class="btn btn-primary" @click="saveConfig" :disabled="saving">
+          {{ saving ? '保存中...' : '💾 保存配置' }}
+        </button>
+        <button class="btn btn-success" @click="generateCode" :disabled="generating">
+          {{ generating ? '生成中...' : '🚀 生成代码' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Routes Tab -->
+    <div v-if="activeTab === 'routes'" class="card">
+      <h2>🛤️ 路由配置</h2>
+      
+      <div v-for="(route, index) in config.routes" :key="index" class="route-item">
+        <div class="form-row">
+          <div class="form-group">
+            <label>方法</label>
+            <select v-model="route.method">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+              <option value="PATCH">PATCH</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>路径</label>
+            <input v-model="route.path" placeholder="/api/users">
+          </div>
+          <div class="form-group">
+            <label>处理器</label>
+            <input v-model="route.handler" placeholder="UserHandler">
+          </div>
+        </div>
+        <button class="btn btn-danger" @click="deleteRoute(index)">🗑️ 删除</button>
+      </div>
+      
+      <button class="btn add-btn" @click="addRoute">➕ 添加路由</button>
+      
+      <div class="btn-group">
+        <button class="btn btn-primary" @click="saveConfig" :disabled="saving">
+          {{ saving ? '保存中...' : '💾 保存配置' }}
+        </button>
+        <button class="btn btn-success" @click="generateCode" :disabled="generating">
+          {{ generating ? '生成中...' : '🚀 生成代码' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- JSON Editor Tab -->
+    <div v-if="activeTab === 'json'" class="card">
+      <h2>📝 JSON 配置编辑器</h2>
+      <textarea 
+        class="json-editor" 
+        v-model="jsonString" 
+        @blur="syncFromJson"
+        placeholder="编辑 JSON 配置..."
+      ></textarea>
+      <div class="btn-group">
+        <button class="btn btn-primary" @click="syncFromJson(); saveConfig()" :disabled="saving">
+          {{ saving ? '保存中...' : '💾 保存 JSON' }}
+        </button>
+        <button class="btn btn-success" @click="generateCode" :disabled="generating">
+          {{ generating ? '生成中...' : '🚀 生成代码' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div v-if="toast.show" :class="['toast', toast.type]">
+      {{ toast.message }}
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+h1 {
+  color: #00d4aa;
+  margin-bottom: 20px;
+  text-align: center;
+}
+.card {
+  background: #16213e;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  border: 1px solid #0f3460;
+}
+.card h2 {
+  color: #00d4aa;
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: #aaa;
+  font-size: 14px;
+}
+.form-group input, .form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #0f3460;
+  background: #0f3460;
+  color: #fff;
+  font-size: 14px;
+}
+.form-group input:focus, .form-group select:focus {
+  outline: none;
+  border-color: #00d4aa;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-primary {
+  background: #00d4aa;
+  color: #1a1a2e;
+}
+.btn-primary:hover {
+  background: #00b894;
+}
+.btn-success {
+  background: #00b894;
+  color: #fff;
+}
+.btn-success:hover {
+  background: #00a085;
+}
+.btn-danger {
+  background: #e74c3c;
+  color: #fff;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.json-editor {
+  width: 100%;
+  min-height: 400px;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #0f3460;
+  background: #0f3460;
+  color: #fff;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  resize: vertical;
+}
+.json-editor:focus {
+  outline: none;
+  border-color: #00d4aa;
+}
+.route-item {
+  background: #0f3460;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.route-item input, .route-item select {
+  background: #1a1a2e;
+  border-color: #1a1a2e;
+  margin-bottom: 8px;
+}
+.route-item .form-row {
+  grid-template-columns: 100px 1fr 1fr;
+}
+.add-btn {
+  background: transparent;
+  border: 2px dashed #0f3460;
+  color: #00d4aa;
+  width: 100%;
+  padding: 16px;
+  border-radius: 8px;
+}
+.add-btn:hover {
+  border-color: #00d4aa;
+  background: rgba(0, 212, 170, 0.1);
+}
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 1000;
+}
+.toast-success {
+  background: #00b894;
+  color: #fff;
+}
+.toast-error {
+  background: #e74c3c;
+  color: #fff;
+}
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: #0f3460;
+  padding: 4px;
+  border-radius: 8px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: #aaa;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.tab-btn.active {
+  background: #00d4aa;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .route-item .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

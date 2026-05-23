@@ -36,13 +36,14 @@ func NewServer(dir string, addr string) (*Server, error) {
 func (s *Server) Start() error {
 	r := gin.Default()
 
+	api := r.Group("/api")
 	// API 路由
-	r.GET("/api/config", s.getConfig)
-	r.POST("/api/config", s.saveConfig)
-	r.POST("/api/generate", s.generate)
+	api.GET("/api/config", s.getConfig)
+	api.POST("/api/config", s.saveConfig)
+	api.POST("/api/generate", s.generate)
 
-	// 提供前端静态文件
-	r.Static("/static", "./web")
+	// 提供前端静态文件（生产模式使用 web/dist）
+	r.Static("/static", "./web/dist")
 	r.GET("/", s.serveIndex)
 
 	return r.Run(s.addr)
@@ -103,9 +104,9 @@ func (s *Server) generate(c *gin.Context) {
 
 // serveIndex 提供前端入口
 func (s *Server) serveIndex(c *gin.Context) {
-	indexPath := filepath.Join("web", "index.html")
+	indexPath := filepath.Join("web", "dist", "index.html")
 	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		c.String(http.StatusNotFound, "前端文件未找到，请先构建前端")
+		c.String(http.StatusNotFound, "前端文件未找到，请先构建前端 (web/dist)")
 		return
 	}
 	c.File(indexPath)
