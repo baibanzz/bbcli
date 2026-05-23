@@ -1,0 +1,28 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"{{.Project.Name}}/config"
+	"{{.Project.Name}}/router"
+)
+
+func main() {
+	// 加载配置
+	cfg := config.Load()
+	
+	// 初始化数据库（如启用）
+	if err := config.InitDB(); err != nil {
+		log.Printf("数据库初始化失败: %v", err)
+	}
+	
+	// 创建 Gin 实例
+	r := router.Setup(cfg)
+	
+	// 启动服务器
+	addr := fmt.Sprintf(":%d", cfg.Project.Port)
+	log.Printf("服务器启动在 http://localhost%s", addr)
+	if err := r.Run(addr); err != nil {
+		log.Fatalf("服务器启动失败: %v", err)
+	}
+}

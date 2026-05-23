@@ -1,0 +1,22 @@
+package router
+
+import (
+	"{{.Project.Name}}/config"
+	"{{.Project.Name}}/handler"
+{{- if .Middlewares }}
+	"{{.Project.Name}}/middleware"
+{{- end }}
+	"github.com/gin-gonic/gin"
+)
+
+func Setup(cfg *config.Config) *gin.Engine {
+	r := gin.Default()
+{{- range .Middlewares }}
+	r.Use(middleware.{{ . }}())
+{{- end }}
+{{- range .Routes }}
+	r.{{ .Method }}("{{ .Path }}", handler.{{ lower (firstChar .Handler) }}{{ restChars .Handler }})
+{{- end }}
+
+	return r
+}
