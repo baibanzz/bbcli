@@ -12,8 +12,11 @@ func NewSwitchs() Switchs {
 	return Switchs{}
 }
 
-func (sws Switchs) Push(s *Tabs) {
-	sws[len(sws)] = s
+func (sws Switchs) Push(title string, Object fyne.CanvasObject) {
+	sws[len(sws)] = &Tabs{
+		Object: Object,
+		Title:  title,
+	}
 }
 
 func (sws Switchs) Title(s string) fyne.CanvasObject {

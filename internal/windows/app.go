@@ -49,18 +49,7 @@ func (a *App) Run() {
 	a.w.ShowAndRun()
 }
 
-func (a *App) switchTab(uid string, w fyne.Window) {
-	//var content fyne.CanvasObject
-	//switch uid {
-	//case "配置":
-	//	content = a.configPanel
-	//case "路由":
-	//	content = a.routerPanel
-	//case "生成":
-	//	content = a.createPanel
-	//default:
-	//	content = a.configPanel
-	//}
+func (a *App) switchTab(uid string) {
 	log.Println(uid)
 	// 替换右侧内容
 	a.rightPanel.Objects = []fyne.CanvasObject{a.rightPanels.Title(uid)}
